@@ -1219,6 +1219,12 @@ const [p, setP] = useState("");
 const [err, setErr] = useState("");
 
 function handleLogin() {
+// Check admin first
+if (u.toLowerCase() === ADMIN_CREDS.username && p === ADMIN_CREDS.password) {
+onLogin(ADMIN_CREDS.username, null);
+return;
+}
+// Check performer accounts
 const users = loadUsers();
 const user = users[u.toLowerCase()];
 if (user && user.password === p) {
@@ -1489,5 +1495,3 @@ onClick={() => handleDelete(slug)}
 </div>
 );
 }
-
-
