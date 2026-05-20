@@ -17,12 +17,14 @@ const ALL_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 const BLANK_VENUE = { club: "", city: "", days: [], hours: "", notes: "" };
 
+const ADMIN_CREDS = { username: "tapped_admin", password: "SI@Parker2024!" };
+
 const SEED_USERS = {
 nova: {
 password: "nova123",
 profile: {
 name: "Nova",
-bio: "Available for private bookings. Tips keep the lights on.",
+bio: "",
 photo: null,
 requireDisclaimer: true,
 pay: {
@@ -1081,7 +1083,7 @@ return (
 </div>
 <div className="field">
 <label>Bio</label>
-<textarea value={draft.bio || ""} onChange={e => updateDraft("bio", e.target.value)} placeholder="Short bio or message to fans..." />
+<textarea value={draft.bio || ""} onChange={e => updateDraft("bio", e.target.value)} placeholder="Add a headline or short bio..." />
 </div>
 <div className="card">
 <div className="section-label" style={{ marginBottom: 10 }}>Your Tap Link</div>
@@ -1250,7 +1252,7 @@ return (
 
 // ─── ROOT APP ─────────────────────────────────────────────────────
 export default function App() {
-const [session, setSession] = useState(null); // { username, profile }
+const [session, setSession] = useState(null); // { username, profile, isAdmin }
 const [preview, setPreview] = useState(false);
 
 // Check for public profile URL: /#/p/username
@@ -1271,7 +1273,11 @@ return (
 }
 
 function handleLogin(username, profile) {
-setSession({ username, profile });
+if (username === ADMIN_CREDS.username) {
+setSession({ username, profile: null, isAdmin: true });
+} else {
+setSession({ username, profile, isAdmin: false });
+}
 }
 
 function handleSave(updatedProfile) {
@@ -1284,6 +1290,15 @@ setSession(prev => ({ ...prev, profile: updatedProfile }));
 function handleLogout() {
 setSession(null);
 setPreview(false);
+}
+
+if (session?.isAdmin) {
+return (
+<>
+<style>{styles}</style>
+<AdminPanel onLogout={handleLogout} />
+</>
+);
 }
 
 if (preview && session) {
@@ -1311,3 +1326,168 @@ onPreview={() => setPreview(true)}
 </>
 );
 }
+
+// ─── ADMIN PANEL ──────────────────────────────────────────────────
+function AdminPanel({ onLogout }) {
+const [tab, setTab] = useState("users");
+const [users, setUsers] = useState(loadUsers());
+const [newUser, setNewUser] = useState({ username: "", password: "", name: "" });
+const [msg, setMsg] = useState("");
+const [deleteConfirm, setDeleteConfirm] = useState(null);
+
+function refreshUsers() {
+setUsers(loadUsers());
+}
+
+function handleCreate() {
+if (!newUser.username || !newUser.password || !newUser.name) {
+setMsg("All fields required."); return;
+}
+const slug = newUser.username.toLowerCase().replace(/\s+/g, "");
+const current = loadUsers();
+if (current[slug]) { setMsg("Username already exists."); return; }
+current[slug] = {
+password: newUser.password,
+profile: {
+name: newUser.name,
+bio: "",
+photo: null,
+requireDisclaimer: true,
+anonymousMode: false,
+pay: {},
+venues: [],
+}
+};
+saveUsers(current);
+setUsers({ ...current });
+setNewUser({ username: "", password: "", name: "" });
+setMsg(`✓ Account created: @${slug}`);
+setTimeout(() => setMsg(""), 3000);
+}
+
+function handleDelete(slug) {
+if (deleteConfirm !== slug) { setDeleteConfirm(slug); return; }
+const current = loadUsers();
+delete current[slug];
+saveUsers(current);
+setUsers({ ...current });
+setDeleteConfirm(null);
+setMsg(`Deleted @${slug}`);
+setTimeout(() => setMsg(""), 2000);
+}
+
+const profileBase = `${window.location.origin}/#/p/`;
+
+return (
+<div className="app">
+<div className="profile-header">
+<div className="profile-avatar" style={{ background: "rgba(212,168,67,0.15)", border: "2px solid var(--gold)", color: "var(--gold)" }}>A</div>
+<div className="profile-info">
+<h2>Admin Panel</h2>
+<div className="stage">SI Parker Technologies</div>
+<span className="badge badge-gold" style={{ marginTop: 6 }}><span className="dot" />Admin</span>
+</div>
+<button className="btn btn-ghost btn-sm" onClick={onLogout}>Out</button>
+</div>
+
+<nav className="nav">
+{["users", "create"].map(t => (
+<button key={t} className={`nav-tab${tab === t ? " active" : ""}`} onClick={() => setTab(t)}>
+{t === "users" ? `Users (${Object.keys(users).length})` : "New User"}
+</button>
+))}
+</nav>
+
+<div className="content">
+{msg && (
+<div style={{
+padding: "12px 16px",
+borderRadius: "var(--radius-sm)",
+background: msg.startsWith("✓") ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)",
+border: `1px solid ${msg.startsWith("✓") ? "rgba(74,222,128,0.3)" : "rgba(248,113,113,0.3)"}`,
+color: msg.startsWith("✓") ? "var(--green)" : "var(--red)",
+fontSize: 13,
+fontFamily: "DM Mono, monospace",
+}}>{msg}</div>
+)}
+
+{tab === "users" && (
+<>
+<div>
+<div className="section-title">All Accounts</div>
+<div className="section-sub">Click a profile URL to preview</div>
+</div>
+{Object.entries(users).map(([slug, data]) => (
+<div key={slug} className="card" style={{ gap: 12, display: "flex", flexDirection: "column" }}>
+<div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+<div>
+<div style={{ fontFamily: "Syne, sans-serif", fontWeight: 700, fontSize: 15 }}>{data.profile.name || slug}</div>
+<div style={{ fontFamily: "DM Mono, monospace", fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>@{slug}</div>
+</div>
+<button
+className="btn btn-sm"
+style={{ background: deleteConfirm === slug ? "rgba(248,113,113,0.15)" : "transparent", border: `1px solid ${deleteConfirm === slug ? "var(--red)" : "var(--border)"}`, color: deleteConfirm === slug ? "var(--red)" : "var(--text-muted)" }}
+onClick={() => handleDelete(slug)}
+>
+{deleteConfirm === slug ? "Confirm?" : "Delete"}
+</button>
+</div>
+<div className="url-row">
+<div className="url-display" style={{ fontSize: 11 }}>{profileBase}{slug}</div>
+<button className="copy-btn" onClick={() => { navigator.clipboard.writeText(`${profileBase}${slug}`); setMsg("✓ Copied!"); setTimeout(() => setMsg(""), 1500); }}>Copy</button>
+</div>
+<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+{Object.entries(data.profile.pay || {}).filter(([,v]) => v).map(([k]) => (
+<span key={k} className="badge badge-green" style={{ fontSize: 10 }}>{k}</span>
+))}
+{(data.profile.venues || []).length > 0 && (
+<span className="badge" style={{ background: "rgba(212,168,67,0.1)", border: "1px solid rgba(212,168,67,0.3)", color: "var(--gold)", fontSize: 10 }}>
+{data.profile.venues.length} venue{data.profile.venues.length > 1 ? "s" : ""}
+</span>
+)}
+</div>
+</div>
+))}
+{Object.keys(users).length === 0 && (
+<div style={{ textAlign: "center", color: "var(--text-muted)", padding: "40px 0", fontSize: 14 }}>No accounts yet</div>
+)}
+</>
+)}
+
+{tab === "create" && (
+<>
+<div>
+<div className="section-title">Create Account</div>
+<div className="section-sub">For new TAPPED customers after purchase</div>
+</div>
+<div className="card">
+<div className="field">
+<label>Stage Name</label>
+<input value={newUser.name} onChange={e => setNewUser(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Destiny" />
+</div>
+<div className="field">
+<label>Username (profile URL slug)</label>
+<input value={newUser.username} onChange={e => setNewUser(p => ({ ...p, username: e.target.value.toLowerCase().replace(/\s+/g, "") }))} placeholder="e.g. destiny" />
+</div>
+<div className="field" style={{ marginBottom: 0 }}>
+<label>Temporary Password</label>
+<input value={newUser.password} onChange={e => setNewUser(p => ({ ...p, password: e.target.value }))} placeholder="They'll change this on first login" />
+</div>
+</div>
+{newUser.username && (
+<div className="card" style={{ padding: 14 }}>
+<div className="section-label" style={{ marginBottom: 6 }}>Profile URL Preview</div>
+<div className="url-display">{profileBase}{newUser.username}</div>
+</div>
+)}
+<button className="btn btn-primary" onClick={handleCreate}>Create Account</button>
+</>
+)}
+
+<div style={{ height: 40 }} />
+</div>
+</div>
+);
+}
+
+
