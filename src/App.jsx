@@ -1044,7 +1044,7 @@ function removeVenue(i) {
 updateDraft("venues", draft.venues.filter((_, idx) => idx !== i));
 }
 
-const profileUrl = `${window.location.origin}/#/p/${username}`;
+const profileUrl = `${window.location.origin}/${username}`;
 
 return (
 <div className="app">
@@ -1261,9 +1261,9 @@ export default function App() {
 const [session, setSession] = useState(null); // { username, profile, isAdmin }
 const [preview, setPreview] = useState(false);
 
-// Check for public profile URL: /#/p/username
-const hash = window.location.hash;
-const publicMatch = hash.match(/^#\/p\/(.+)$/);
+// Check for public profile URL: /username
+const hash = window.location.pathname;
+const publicMatch = hash.match(/^\/(.+)$/);
 if (publicMatch) {
 const slug = publicMatch[1];
 const users = loadUsers();
@@ -1382,7 +1382,7 @@ setMsg(`Deleted @${slug}`);
 setTimeout(() => setMsg(""), 2000);
 }
 
-const profileBase = `${window.location.origin}/#/p/`;
+const profileBase = `${window.location.origin}/`;
 
 return (
 <div className="app">
