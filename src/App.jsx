@@ -501,7 +501,7 @@ anonymous_mode: false,
 pay: {},
 venues: [],
 });
-if (error) { setMsg("Username already exists."); return; }
+if (error) { setMsg(error.message); return; }
 setNewUser({ username: "", password: "", name: "" });
 setMsg(`✓ Account created: @${slug}`);
 setTimeout(() => setMsg(""), 3000);
