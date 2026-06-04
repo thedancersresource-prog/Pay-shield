@@ -203,7 +203,7 @@ return (
 <div className="pay-button-icon">{p.abbr}</div>
 <div className="pay-button-info">
 <div className="pay-button-label">{p.label}</div>
-<div className="pay-button-handle">{profile.pay[p.id]}</div>
+
 </div>
 <span className="pay-arrow">›</span>
 </button>
