@@ -140,25 +140,56 @@ instagram: `https://instagram.com/${value.replace("@", "")}`,
 return map[platform] || null;
 }
 
-function DisclaimerModal({ name, onAccept }) {
+function DisclaimerModal({ name, tapEventId, onAccept }) {
+const [customerName, setCustomerName] = useState("");
+const [error, setError] = useState("");
+const [loading, setLoading] = useState(false);
 const ts = new Date().toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+const disclaimerText = "All tips are voluntary. Transactions are final and non-refundable. Initiating a chargeback for a voluntary tip may constitute fraud.";
+
+async function handleConfirm() {
+if (!customerName.trim()) { setError("Please type your name to continue."); return; }
+setLoading(true);
+if (tapEventId) {
+await supabase.from("tap_events").update({
+customer_name: customerName.trim(),
+acknowledgment_text: disclaimerText,
+disclaimer_accepted: true,
+disclaimer_accepted_at: new Date().toISOString(),
+}).eq("id", tapEventId);
+}
+onAccept(customerName.trim());
+setLoading(false);
+}
+
 return (
 <div className="modal-overlay">
 <div className="modal">
 <div>
 <div className="modal-title">Before You Tip {name}</div>
-<div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>Please read and acknowledge the following</div>
+<div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>Please read and acknowledge</div>
 </div>
 <div className="disclaimer-text">
 <div className="disclaimer-clause">All tips are voluntary personal transactions between you and the performer.</div>
 <div className="disclaimer-clause">You confirm you are of legal age to make this transaction in your jurisdiction.</div>
 <div className="disclaimer-clause">All transactions are final and non-refundable. Tipping is a gift, not a purchase.</div>
 <div className="disclaimer-clause">Initiating a chargeback or payment dispute for a voluntary tip may constitute fraud and can result in legal action.</div>
-<div className="disclaimer-clause">No personal information is collected or stored from this interaction.</div>
 <div className="disclaimer-clause">This platform (TAPPED / SI Parker Technologies) is not a party to this transaction and assumes no liability.</div>
 </div>
 <div className="timestamp">Acknowledged: {ts}</div>
-<button className="btn btn-primary" onClick={onAccept}>I Understand — Continue to Tip</button>
+<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+<label style={{ fontFamily: "DM Mono, monospace", fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Type your name to confirm</label>
+<input
+value={customerName}
+onChange={e => { setCustomerName(e.target.value); setError(""); }}
+placeholder="Your full name"
+style={{ background: "var(--surface2)", border: `1px solid ${error ? "var(--red)" : "var(--border)"}`, borderRadius: "var(--radius-sm)", color: "var(--text)", fontFamily: "DM Sans, sans-serif", fontSize: 14, padding: "12px 14px", outline: "none", width: "100%" }}
+/>
+{error && <div style={{ fontSize: 12, color: "var(--red)" }}>{error}</div>}
+</div>
+<button className="btn btn-primary" onClick={handleConfirm} disabled={loading}>
+{loading ? "Saving..." : "I Agree — Continue to Tip"}
+</button>
 </div>
 </div>
 );
@@ -178,7 +209,7 @@ if (url) window.open(url, "_blank");
 return (
 <div className="public-profile">
 {showDisclaimer && !accepted && (
-<DisclaimerModal name={profile.stage_name} onAccept={() => { setAccepted(true); setShowDisclaimer(false); }} />
+<DisclaimerModal name={profile.stage_name} tapEventId={null} onAccept={(customerName) => { setAccepted(true); setShowDisclaimer(false); }} />
 )}
 <div className="header">
 <div className="logo">TAPPED</div>
