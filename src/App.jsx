@@ -6,11 +6,51 @@ const PAY_PLATFORMS = [
 { id: "venmo", label: "Venmo", abbr: "V", placeholder: "@YourVenmo" },
 { id: "zelle", label: "Zelle", abbr: "Z", placeholder: "phone or email" },
 { id: "paypal", label: "PayPal", abbr: "PP", placeholder: "paypal.me/yourlink" },
-{ id: "applepay", label: "Apple Pay", abbr: "AP", placeholder: "phone number" },
+{ id: "applepay", label: "Apple Pay", abbr: "AP", placeholder: "phone number" }, 
 { id: "onlyfans", label: "OnlyFans", abbr: "OF", placeholder: "onlyfans.com/you" },
 { id: "fansly", label: "Fansly", abbr: "FL", placeholder: "fansly.com/you" },
 { id: "instagram", label: "Instagram", abbr: "IG", placeholder: "@yourhandle" },
 ];
+const TRANSLATIONS = {
+en: {
+beforeYouTip: "Before You Tip",
+pleaseRead: "Please read and acknowledge",
+clause1: "All tips are voluntary personal transactions between you and the performer.",
+clause2: "You confirm you are of legal age to make this transaction in your jurisdiction.",
+clause3: "All transactions are final and non-refundable. Tipping is a gift, not a purchase.",
+clause4: "Initiating a chargeback or payment dispute for a voluntary tip may constitute fraud and can result in legal action.",
+clause5: "This platform (TAPPED / SI Parker Technologies) is not a party to this transaction and assumes no liability.",
+acknowledged: "Acknowledged",
+typeYourName: "Type your name to confirm",
+yourFullName: "Your full name",
+pleaseTypeName: "Please type your name to continue.",
+iAgree: "I Agree — Continue to Tip",
+saving: "Saving...",
+sendATip: "Send a Tip",
+whereToFind: "Where to Find Me",
+protected: "Protected",
+poweredBy: "Protected by TAPPED · SI Parker Technologies",
+},
+es: {
+beforeYouTip: "Antes de Dar Propina a",
+pleaseRead: "Por favor lee y confirma lo siguiente",
+clause1: "Todas las propinas son transacciones voluntarias entre tú y el artista.",
+clause2: "Confirmas que tienes la edad legal para realizar esta transacción en tu jurisdicción.",
+clause3: "Todas las transacciones son definitivas y no reembolsables. La propina es un regalo, no una compra.",
+clause4: "Iniciar un contracargo por una propina voluntaria puede constituir fraude y resultar en acciones legales.",
+clause5: "Esta plataforma (TAPPED / SI Parker Technologies) no es parte de esta transacción y no asume ninguna responsabilidad.",
+acknowledged: "Confirmado",
+typeYourName: "Escribe tu nombre para confirmar",
+yourFullName: "Tu nombre completo",
+pleaseTypeName: "Por favor escribe tu nombre para continuar.",
+iAgree: "Acepto — Continuar a la Propina",
+saving: "Guardando...",
+sendATip: "Enviar Propina",
+whereToFind: "Dónde Encontrarme",
+protected: "Protegido",
+poweredBy: "Protegido por TAPPED · SI Parker Technologies",
+}
+};
 
 const ALL_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const BLANK_VENUE = { club: "", city: "", days: [], hours: "", notes: "" };
@@ -140,13 +180,14 @@ instagram: `https://instagram.com/${value.replace("@", "")}`,
 return map[platform] || null;
 }
 
-function DisclaimerModal({ name, tapEventId, onAccept }) {
+function DisclaimerModal({ name, tapEventId, onAccept, lang = "en" }) {
 const [customerName, setCustomerName] = useState("");
 const [error, setError] = useState("");
 const [loading, setLoading] = useState(false);
 const ts = new Date().toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
-const disclaimerText = "All tips are voluntary. Transactions are final and non-refundable. Initiating a chargeback for a voluntary tip may constitute fraud.";
 
+const t = TRANSLATIONS[lang] || TRANSLATIONS.en;
+const disclaimerText = t.clause1 + " " + t.clause3 + " " + t.clause4;
 async function handleConfirm() {
 if (!customerName.trim()) { setError("Please type your name to continue."); return; }
 setLoading(true);
