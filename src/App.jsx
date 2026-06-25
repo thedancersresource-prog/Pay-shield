@@ -504,7 +504,7 @@ const publicMatch = path.match(/^\/([^/]+)$/);
 useEffect(() => {
 if (publicMatch) {
 const slug = publicMatch[1];
-supabase.from("performers").select("stage_name, name, bio, photo_url, pay, venues, disclaimer_enabled, message_enabled, photo_enabled, info_capture_enabled, anonymous_mode, message, slug").eq("slug", slug).single()
+supabase.from("performers").select("stage_name,name,message,photo_url,pay,venues,disclaimer_enabled,message_enabled,photo_enabled,info_capture_enabled,anonymous_mode,slug").eq("slug", slug).single()
 .then(({ data }) => {
 if (data) setPublicProfile(data);
 setLoading(false);
