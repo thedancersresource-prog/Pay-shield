@@ -437,6 +437,20 @@ return (
 <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 14 }}>Logged in as @{username}</div>
 <button className="btn btn-danger btn-sm" onClick={onLogout}>Sign Out</button>
 </div>
+<div className="card">
+<div className="section-label" style={{ marginBottom: 10 }}>Change Password</div>
+<div className="field">
+<label>New Password</label>
+<input type="password" value={newPassword} onChange={e => { setNewPassword(e.target.value); setPwMsg(""); }} placeholder="Enter new password" />
+</div>
+<div className="field" style={{ marginBottom: 10 }}>
+<label>Confirm New Password</label>
+<input type="password" value={confirmPassword} onChange={e => { setConfirmPassword(e.target.value); setPwMsg(""); }} placeholder="Confirm new password" />
+</div>
+{pwMsg && <div style={{ fontSize: 13, color: pwMsg.startsWith("✓") ? "var(--green)" : "var(--red)", marginBottom: 10 }}>{pwMsg}</div>}
+<button className="btn btn-primary" onClick={handlePasswordChange}>Update Password</button>
+</div>
+
 </>
 )}
 <div style={{ height: 80 }} />
