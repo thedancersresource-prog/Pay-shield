@@ -9,8 +9,9 @@ module.exports = handle(async (req, res) => {
   // Admin login: credentials live only in Vercel environment variables.
   const adminUser = (process.env.ADMIN_USERNAME || "tapped_admin").toLowerCase();
   if (slug === adminUser) {
-    const adminPw = process.env.ADMIN_PASSWORD;
-    if (adminPw && safeEqual(password, adminPw)) {
+    // Trim both sides: values pasted into Vercel often carry a stray space or line break.
+    const adminPw = String(process.env.ADMIN_PASSWORD || "").trim();
+    if (adminPw && safeEqual(String(password).trim(), adminPw)) {
       return send(res, 200, { token: signToken({ role: "admin", slug: adminUser }, 1), role: "admin" });
     }
     return send(res, 401, { error: "Invalid username or password" });
