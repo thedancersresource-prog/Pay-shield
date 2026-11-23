@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { supabase } from "./supabase";
+import { api, getSession, setSession as storeSession } from "./api";
 
 const PAY_PLATFORMS = [
 { id: "cashapp", label: "Cash App", abbr: "CA", placeholder: "$YourCashTag" },
@@ -54,7 +55,6 @@ poweredBy: "Protegido por TAPPED · SI Parker Technologies",
 
 const ALL_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const BLANK_VENUE = { club: "", city: "", days: [], hours: "", notes: "" };
-const ADMIN_CREDS = { username: "tapped_admin", password: "SI@Parker2024!" };
 
 const styles = `@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800;900&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
 
@@ -317,19 +317,40 @@ return (
 );
 }
 
-function Dashboard({ username, profile, onSave, onLogout, onPreview }) {
+function Dashboard({ username, profile, onSave, onLogout, onPreview, welcome }) {
 const [tab, setTab] = useState("profile");
 const [draft, setDraft] = useState(JSON.parse(JSON.stringify(profile)));
 const [saved, setSaved] = useState(false);
+const [saveErr, setSaveErr] = useState("");
+const [newPassword, setNewPassword] = useState("");
+const [confirmPassword, setConfirmPassword] = useState("");
+const [pwMsg, setPwMsg] = useState("");
 const fileRef = useRef();
 
 function updateDraft(key, val) { setDraft(prev => ({ ...prev, [key]: val })); setSaved(false); }
 function updatePay(id, val) { setDraft(prev => ({ ...prev, pay: { ...prev.pay, [id]: val } })); setSaved(false); }
 
 async function handleSave() {
+setSaveErr("");
+try {
 await onSave(draft);
 setSaved(true);
 setTimeout(() => setSaved(false), 2000);
+} catch (e) {
+setSaveErr(e.message);
+}
+}
+
+async function handlePasswordChange() {
+if (newPassword.length < 8) { setPwMsg("Password must be at least 8 characters."); return; }
+if (newPassword !== confirmPassword) { setPwMsg("Passwords don't match."); return; }
+try {
+await api("profile", { method: "POST", body: { newPassword } });
+setNewPassword(""); setConfirmPassword("");
+setPwMsg("✓ Password updated");
+} catch (e) {
+setPwMsg(e.message);
+}
 }
 
 function handlePhoto(e) {
@@ -369,6 +390,12 @@ return (
 <div className="content">
 {tab === "profile" && (
 <>
+{welcome && (
+<div className="card" style={{ borderColor: "rgba(74,222,128,0.4)", background: "rgba(74,222,128,0.06)" }}>
+<div className="section-title" style={{ color: "var(--green)" }}>Your URL is locked in</div>
+<div style={{ fontSize: 13, color: "var(--text-dim)", lineHeight: 1.6 }}>We'll program your chips to {profileUrl} and ship your order. Add your pay links and venues below anytime. Your chips never need reprogramming.</div>
+</div>
+)}
 <div><div className="section-title">Your Profile</div><div className="section-sub">This is what fans see when they tap your chip</div></div>
 <div className="field"><label>Stage Name</label><input value={draft.stage_name || ""} onChange={e => updateDraft("stage_name", e.target.value)} placeholder="Your stage name" /></div>
 <div className="field"><label>Bio</label><textarea value={draft.bio || ""} onChange={e => updateDraft("bio", e.target.value)} placeholder="Add a headline or short bio..." /></div>
@@ -455,7 +482,8 @@ return (
 )}
 <div style={{ height: 80 }} />
 </div>
-<div className="save-bar">
+<div className="save-bar" style={{ flexDirection: "column" }}>
+{saveErr && <div style={{ fontSize: 12, color: "var(--red)" }}>{saveErr}</div>}
 <button className="btn btn-primary" onClick={handleSave}>{saved ? "✓ Saved" : "Save Changes"}</button>
 </div>
 </div>
@@ -471,21 +499,13 @@ const [loading, setLoading] = useState(false);
 async function handleLogin() {
 setLoading(true);
 setErr("");
-if (u.toLowerCase() === ADMIN_CREDS.username && p === ADMIN_CREDS.password) {
-onLogin(ADMIN_CREDS.username, null, true);
-setLoading(false);
-return;
-}
-const { data, error } = await supabase
-.from("performers")
-.select("*")
-.eq("slug", u.toLowerCase())
-.eq("password", p)
-.single();
-if (error || !data) {
-setErr("Invalid username or password");
-} else {
-onLogin(data.slug, data, false);
+try {
+const data = await api("login", { method: "POST", body: { username: u, password: p } });
+storeSession(data.token, data.role);
+if (data.role === "admin") onLogin("admin", null, true);
+else onLogin(data.profile.slug, data.profile, false);
+} catch (e) {
+setErr(e.message);
 }
 setLoading(false);
 }
@@ -501,6 +521,79 @@ return (
 <div className="field"><label>Username</label><input value={u} onChange={e => { setU(e.target.value); setErr(""); }} placeholder="your username" onKeyDown={e => e.key === "Enter" && handleLogin()} /></div>
 <div className="field"><label>Password</label><input type="password" value={p} onChange={e => { setP(e.target.value); setErr(""); }} placeholder="••••••••" onKeyDown={e => e.key === "Enter" && handleLogin()} /></div>
 <button className="btn btn-primary" onClick={handleLogin} disabled={loading}>{loading ? "Signing in..." : "Sign In"}</button>
+<a href="/claim" className="btn btn-ghost" style={{ marginTop: 12 }}>Just bought TAPPED? Choose your URL</a>
+</div>
+</div>
+);
+}
+
+function Claim({ onDone }) {
+const params = new URLSearchParams(window.location.search);
+const [order, setOrder] = useState(params.get("order") || "");
+const [email, setEmail] = useState(params.get("email") || "");
+const [slug, setSlug] = useState("");
+const [stageName, setStageName] = useState("");
+const [password, setPassword] = useState("");
+const [confirm, setConfirm] = useState("");
+const [slugState, setSlugState] = useState({ checking: false, available: null, error: "" });
+const [err, setErr] = useState("");
+const [loading, setLoading] = useState(false);
+const base = `${window.location.host}/`;
+
+useEffect(() => {
+if (!slug) { setSlugState({ checking: false, available: null, error: "" }); return; }
+setSlugState(s => ({ ...s, checking: true }));
+const t = setTimeout(() => {
+api(`slug?slug=${encodeURIComponent(slug)}`)
+.then(d => setSlugState({ checking: false, available: d.available, error: d.error || "" }))
+.catch(() => setSlugState({ checking: false, available: null, error: "" }));
+}, 400);
+return () => clearTimeout(t);
+}, [slug]);
+
+async function handleClaim() {
+setErr("");
+if (!order.trim() || !email.trim()) { setErr("Enter your order number and the email you ordered with."); return; }
+if (!slug || slugState.available === false) { setErr(slugState.error || "Choose your URL."); return; }
+if (!stageName.trim()) { setErr("Enter the name you want on your profile."); return; }
+if (password.length < 8) { setErr("Password must be at least 8 characters."); return; }
+if (password !== confirm) { setErr("Passwords don't match."); return; }
+setLoading(true);
+try {
+const data = await api("claim", { method: "POST", body: { order, email, slug, stageName, password } });
+storeSession(data.token, data.role);
+window.history.replaceState(null, "", "/");
+onDone(data.profile);
+} catch (e) {
+setErr(e.message);
+}
+setLoading(false);
+}
+
+const slugColor = slugState.error ? "var(--red)" : slugState.available ? "var(--green)" : "var(--text-muted)";
+
+return (
+<div className="login-screen">
+<div className="login-logo">
+<div className="wordmark">TAPPED</div>
+<div className="sub">Choose your URL</div>
+</div>
+<div className="login-form">
+<div style={{ fontSize: 14, color: "var(--text-dim)", lineHeight: 1.6, marginBottom: 20, textAlign: "center" }}>This is the link your chips will open. Pick it now and create your login. You can add your pay links and venues after.</div>
+{err && <div className="login-error">{err}</div>}
+<div className="field"><label>Order Number</label><input value={order} onChange={e => { setOrder(e.target.value); setErr(""); }} placeholder="#1001" /></div>
+<div className="field"><label>Email You Ordered With</label><input type="email" value={email} onChange={e => { setEmail(e.target.value); setErr(""); }} placeholder="you@email.com" /></div>
+<div className="field">
+<label>Your URL</label>
+<input value={slug} onChange={e => { setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "")); setErr(""); }} placeholder="yourname" autoCapitalize="none" autoCorrect="off" />
+<div className="url-display">{base}<span style={{ color: "var(--green)" }}>{slug || "yourname"}</span></div>
+{slug && <div style={{ fontSize: 12, color: slugColor }}>{slugState.checking ? "Checking..." : slugState.error || (slugState.available ? "✓ Available" : "")}</div>}
+</div>
+<div className="field"><label>Name on Your Profile</label><input value={stageName} onChange={e => { setStageName(e.target.value); setErr(""); }} placeholder="Stage name or business name" /></div>
+<div className="field"><label>Create Password</label><input type="password" value={password} onChange={e => { setPassword(e.target.value); setErr(""); }} placeholder="At least 8 characters" /></div>
+<div className="field"><label>Confirm Password</label><input type="password" value={confirm} onChange={e => { setConfirm(e.target.value); setErr(""); }} placeholder="Type it again" onKeyDown={e => e.key === "Enter" && handleClaim()} /></div>
+<button className="btn btn-primary" onClick={handleClaim} disabled={loading}>{loading ? "Setting up..." : "Lock In My URL"}</button>
+<a href="/" className="btn btn-ghost" style={{ marginTop: 12 }}>Already set up? Sign in</a>
 </div>
 </div>
 );
@@ -512,20 +605,32 @@ const [preview, setPreview] = useState(false);
 const [publicProfile, setPublicProfile] = useState(null);
 const [loading, setLoading] = useState(true);
 
+const [welcome, setWelcome] = useState(false);
+const [claiming, setClaiming] = useState(() => /^\/claim\/?$/.test(window.location.pathname));
+
 const path = window.location.pathname;
-const publicMatch = path.match(/^\/([^/]+)$/);
+const publicMatch = !claiming && path.match(/^\/([^/]+)\/?$/);
 
 useEffect(() => {
 if (publicMatch) {
 const slug = publicMatch[1];
-supabase.from("performers").select("stage_name,name,message,photo_url,pay,venues,disclaimer_enabled,message_enabled,photo_enabled,info_capture_enabled,anonymous_mode,slug").eq("slug", slug).single()
-.then(({ data }) => {
-if (data) setPublicProfile(data);
-setLoading(false);
-});
-} else {
-setLoading(false);
+api(`public?slug=${encodeURIComponent(slug)}`)
+.then(d => setPublicProfile(d.profile))
+.catch(() => {})
+.finally(() => setLoading(false));
+return;
 }
+const saved = getSession();
+if (!saved.token) { setLoading(false); return; }
+if (saved.role === "admin") {
+setSession({ username: "admin", profile: null, isAdmin: true });
+setLoading(false);
+return;
+}
+api("profile")
+.then(d => { setSession({ username: d.profile.slug, profile: d.profile, isAdmin: false }); setClaiming(false); })
+.catch(() => storeSession(null))
+.finally(() => setLoading(false));
 }, []);
 
 if (loading) return <><style>{styles}</style><div className="app" style={{ alignItems: "center", justifyContent: "center", display: "flex" }}><div style={{ color: "var(--green)", fontFamily: "DM Mono, monospace" }}>Loading...</div></div></>;
@@ -535,16 +640,19 @@ return <><style>{styles}</style><PublicProfile profile={publicProfile} /></>;
 }
 
 async function handleSave(updatedProfile) {
-const { slug, password, id, created_at, joined_at, ...updateData } = updatedProfile;
-await supabase.from("performers").update(updateData).eq("slug", session.username);
-setSession(prev => ({ ...prev, profile: updatedProfile }));
+const d = await api("profile", { method: "PUT", body: updatedProfile });
+setSession(prev => ({ ...prev, profile: d.profile }));
 }
 
 function handleLogin(username, profile, isAdmin) {
 setSession({ username, profile, isAdmin });
 }
 
-function handleLogout() { setSession(null); setPreview(false); }
+function handleLogout() { storeSession(null); setSession(null); setPreview(false); setWelcome(false); }
+
+if (claiming && !session) {
+return <><style>{styles}</style><div className="app"><Claim onDone={(profile) => { setSession({ username: profile.slug, profile, isAdmin: false }); setWelcome(true); setClaiming(false); }} /></div></>;
+}
 
 if (session?.isAdmin) return <><style>{styles}</style><AdminPanel onLogout={handleLogout} /></>;
 if (preview && session) return <><style>{styles}</style><PublicProfile profile={session.profile} onBack={() => setPreview(false)} /></>;
@@ -554,54 +662,77 @@ return (
 <style>{styles}</style>
 {!session
 ? <div className="app"><Login onLogin={handleLogin} /></div>
-: <Dashboard username={session.username} profile={session.profile} onSave={handleSave} onLogout={handleLogout} onPreview={() => setPreview(true)} />
+: <Dashboard username={session.username} profile={session.profile} onSave={handleSave} onLogout={handleLogout} onPreview={() => setPreview(true)} welcome={welcome} />
 }
 </>
 );
 }
 
 function AdminPanel({ onLogout }) {
-const [tab, setTab] = useState("users");
+const [tab, setTab] = useState("orders");
 const [users, setUsers] = useState([]);
 const [newUser, setNewUser] = useState({ username: "", password: "", name: "" });
 const [msg, setMsg] = useState("");
 const [deleteConfirm, setDeleteConfirm] = useState(null);
+const [orders, setOrders] = useState([]);
+const [newOrder, setNewOrder] = useState({ order: "", email: "" });
 
-useEffect(() => { loadUsers(); }, []);
+useEffect(() => { loadUsers(); loadOrders(); }, []);
+
+function handleApiError(e) {
+if (e.status === 401) { onLogout(); return; }
+setMsg(e.message);
+}
 
 async function loadUsers() {
-const { data } = await supabase.from("performers").select("*");
-if (data) setUsers(data);
+try { const d = await api("admin?view=users"); setUsers(d.users || []); } catch (e) { handleApiError(e); }
+}
+
+async function loadOrders() {
+try { const d = await api("admin?view=orders"); setOrders(d.orders || []); } catch (e) { handleApiError(e); }
 }
 
 async function handleCreate() {
 if (!newUser.username || !newUser.password || !newUser.name) { setMsg("All fields required."); return; }
-const slug = newUser.username.toLowerCase().replace(/\s+/g, "");
-const { error } = await supabase.from("performers").insert({
-slug,
-password: newUser.password,
-stage_name: newUser.name,
-name: newUser.name,
-disclaimer_enabled: true,
-anonymous_mode: false,
-pay: {},
-venues: [],
-});
-if (error) { setMsg(error.message); return; }
+try {
+const d = await api("admin", { method: "POST", body: { action: "create", ...newUser } });
 setNewUser({ username: "", password: "", name: "" });
-setMsg(`✓ Account created: @${slug}`);
+setMsg(`✓ Account created: @${d.slug}`);
 setTimeout(() => setMsg(""), 3000);
 loadUsers();
+} catch (e) { handleApiError(e); }
 }
 
 async function handleDelete(slug) {
 if (deleteConfirm !== slug) { setDeleteConfirm(slug); return; }
-await supabase.from("performers").delete().eq("slug", slug);
+try {
+await api("admin", { method: "POST", body: { action: "delete", slug } });
 setDeleteConfirm(null);
 setMsg(`Deleted @${slug}`);
 setTimeout(() => setMsg(""), 2000);
-loadUsers();
+loadUsers(); loadOrders();
+} catch (e) { handleApiError(e); }
 }
+
+async function toggleProgrammed(o) {
+try {
+await api("admin", { method: "POST", body: { action: "programmed", order: o.order_name, value: !o.chips_programmed } });
+loadOrders();
+} catch (e) { handleApiError(e); }
+}
+
+async function handleAddOrder() {
+if (!newOrder.order || !newOrder.email) { setMsg("Order number and email required."); return; }
+try {
+await api("admin", { method: "POST", body: { action: "addOrder", ...newOrder } });
+setNewOrder({ order: "", email: "" });
+setMsg("✓ Order added. That customer can now claim their URL.");
+setTimeout(() => setMsg(""), 3000);
+loadOrders();
+} catch (e) { handleApiError(e); }
+}
+
+const toProgram = orders.filter(o => o.claimed_slug && !o.chips_programmed).length;
 
 const profileBase = `${window.location.origin}/`;
 
@@ -617,15 +748,52 @@ return (
 <button className="btn btn-ghost btn-sm" onClick={onLogout}>Out</button>
 </div>
 <nav className="nav">
-{["users", "create"].map(t => (
+{["orders", "users", "create"].map(t => (
 <button key={t} className={`nav-tab${tab === t ? " active" : ""}`} onClick={() => setTab(t)}>
-{t === "users" ? `Users (${users.length})` : "New User"}
+{t === "orders" ? `Orders${toProgram ? ` (${toProgram})` : ""}` : t === "users" ? `Users (${users.length})` : "New User"}
 </button>
 ))}
 </nav>
 <div className="content">
 {msg && (
 <div style={{ padding: "12px 16px", borderRadius: "var(--radius-sm)", background: msg.startsWith("✓") ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)", border: `1px solid ${msg.startsWith("✓") ? "rgba(74,222,128,0.3)" : "rgba(248,113,113,0.3)"}`, color: msg.startsWith("✓") ? "var(--green)" : "var(--red)", fontSize: 13, fontFamily: "DM Mono, monospace" }}>{msg}</div>
+)}
+{tab === "orders" && (
+<>
+<div><div className="section-title">Orders</div><div className="section-sub">Paid orders from Shopify. Program chips once a URL is claimed.</div></div>
+{orders.map(o => (
+<div key={o.order_name} className="card" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+<div>
+<div style={{ fontFamily: "Syne, sans-serif", fontWeight: 700, fontSize: 15 }}>#{o.order_name}</div>
+<div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{o.email}</div>
+</div>
+{!o.claimed_slug
+? <span className="badge" style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}>Waiting on customer</span>
+: o.chips_programmed
+? <span className="badge badge-green"><span className="dot" />Programmed</span>
+: <span className="badge badge-gold"><span className="dot" />Program chips</span>}
+</div>
+{o.claimed_slug && (
+<>
+<div className="url-row">
+<div className="url-display" style={{ fontSize: 11 }}>{profileBase}{o.claimed_slug}</div>
+<button className="copy-btn" onClick={() => { navigator.clipboard.writeText(`${profileBase}${o.claimed_slug}`); setMsg("✓ Copied!"); setTimeout(() => setMsg(""), 1500); }}>Copy</button>
+</div>
+<button className="btn btn-outline btn-sm" onClick={() => toggleProgrammed(o)}>{o.chips_programmed ? "Mark Not Programmed" : "Mark Chips Programmed"}</button>
+</>
+)}
+</div>
+))}
+{orders.length === 0 && <div style={{ textAlign: "center", color: "var(--text-muted)", padding: "24px 0", fontSize: 14 }}>No orders yet</div>}
+<div className="card">
+<div className="section-label" style={{ marginBottom: 10 }}>Add an Older Order</div>
+<div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>For orders placed before automatic sync was turned on.</div>
+<div className="field"><label>Order Number</label><input value={newOrder.order} onChange={e => setNewOrder(p => ({ ...p, order: e.target.value }))} placeholder="#1001" /></div>
+<div className="field"><label>Customer Email</label><input value={newOrder.email} onChange={e => setNewOrder(p => ({ ...p, email: e.target.value }))} placeholder="customer@email.com" /></div>
+<button className="btn btn-primary" onClick={handleAddOrder}>Add Order</button>
+</div>
+</>
 )}
 {tab === "users" && (
 <>
