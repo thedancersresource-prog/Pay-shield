@@ -5,7 +5,7 @@ const { createClient } = require("@supabase/supabase-js");
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://wpdciwlmkcujworsywbl.supabase.co";
 
 function db() {
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const key = String(process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
   if (!key) throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set");
   return createClient(SUPABASE_URL, key, { auth: { persistSession: false } });
 }
@@ -33,7 +33,7 @@ function safeEqual(a, b) {
 
 // Sessions: HMAC-signed token, sent as "Authorization: Bearer <token>".
 function secret() {
-  const s = process.env.SESSION_SECRET;
+  const s = String(process.env.SESSION_SECRET || "").trim();
   if (!s || s.length < 32) throw new Error("SESSION_SECRET must be set to 32+ characters");
   return s;
 }
