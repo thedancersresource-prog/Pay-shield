@@ -4,10 +4,24 @@ const { createClient } = require("@supabase/supabase-js");
 
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://wpdciwlmkcujworsywbl.supabase.co";
 
+// Public (anon) key: same one the browser app already ships. Only reads the public_profiles view.
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndwZGNpd2xta2N1andvcnN5d2JsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyMTk2MjUsImV4cCI6MjA5NDc5NTYyNX0.oMzZ92MA37WDnIDpVtVcOBOzXobAxxlMjq_0gE0fHE8";
+
+function anonDb() {
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: false } });
+}
+
 function db() {
   const key = String(process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
   if (!key) throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set");
-  return createClient(SUPABASE_URL, key, { auth: { persistSession: false } });
+  // New-style sb_secret_ keys belong only in the apikey header. Some client versions also send them
+  // as "Authorization: Bearer", which Supabase rejects as an invalid key, so strip that here.
+  const keyFetch = (input, init = {}) => {
+    const headers = new Headers(init.headers || {});
+    if (key.startsWith("sb_") && headers.get("Authorization") === `Bearer ${key}`) headers.delete("Authorization");
+    return fetch(input, { ...init, headers });
+  };
+  return createClient(SUPABASE_URL, key, { auth: { persistSession: false }, global: { fetch: keyFetch } });
 }
 
 // Passwords: scrypt with a random salt. Stored as scrypt$<salt hex>$<hash hex>.
@@ -117,7 +131,7 @@ function handle(fn) {
 }
 
 module.exports = {
-  db, hashPassword, verifyPassword, safeEqual, signToken, readToken,
+  db, anonDb, hashPassword, verifyPassword, safeEqual, signToken, readToken,
   normalizeSlug, slugError, normalizeOrder, sanitize, pick,
   PUBLIC_FIELDS, EDITABLE_FIELDS, send, body, handle,
 };

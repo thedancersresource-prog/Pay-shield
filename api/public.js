@@ -1,4 +1,4 @@
-const { db, normalizeSlug, pick, PUBLIC_FIELDS, send, handle } = require("./_lib");
+const { anonDb, normalizeSlug, pick, PUBLIC_FIELDS, send, handle } = require("./_lib");
 
 // Public profile shown when someone taps a chip. Never returns passwords.
 module.exports = handle(async (req, res) => {
@@ -6,7 +6,7 @@ module.exports = handle(async (req, res) => {
   const slug = normalizeSlug(req.query.slug);
   if (!slug) return send(res, 400, { error: "Missing profile." });
 
-  const { data: row } = await db().from("performers").select("*").eq("slug", slug).maybeSingle();
+  const { data: row } = await anonDb().from("public_profiles").select("*").eq("slug", slug).maybeSingle();
   if (!row) return send(res, 404, { error: "Profile not found." });
 
   res.setHeader("Cache-Control", "s-maxage=30, stale-while-revalidate=60");
