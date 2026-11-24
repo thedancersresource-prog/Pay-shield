@@ -11,7 +11,7 @@ module.exports = async (req, res) => {
   }
   out.session = (process.env.SESSION_SECRET || "").trim().length >= 32 ? "ok" : "missing";
   out.admin = (process.env.ADMIN_PASSWORD || "").trim() ? "ok" : "missing";
-  out.webhook = (process.env.SHOPIFY_WEBHOOK_SECRET || "").trim() ? "ok" : "missing";
+  out.webhook = (process.env.SHOPIFY_WEBHOOK_SECRET || process.env.SHOPIFY_WEBHOOK_KEY || "").trim() ? "ok" : "missing";
   res.setHeader("Cache-Control", "no-store");
   send(res, 200, out);
 };

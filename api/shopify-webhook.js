@@ -15,10 +15,14 @@ module.exports = async (req, res) => {
   if (req.method !== "POST") return res.status(405).end();
   try {
     const raw = await readRaw(req);
-    const secret = process.env.SHOPIFY_WEBHOOK_SECRET;
+    // Accept either Shopify's signature (signing secret) or the private key in the webhook URL.
+    const secret = String(process.env.SHOPIFY_WEBHOOK_SECRET || "").trim();
+    const urlKey = String(process.env.SHOPIFY_WEBHOOK_KEY || "").trim();
     const given = req.headers["x-shopify-hmac-sha256"] || "";
     const expected = secret ? crypto.createHmac("sha256", secret).update(raw).digest("base64") : "";
-    if (!secret || !safeEqual(given, expected)) return res.status(401).end();
+    const signed = secret && safeEqual(given, expected);
+    const keyed = urlKey && safeEqual(String(req.query.key || ""), urlKey);
+    if (!signed && !keyed) return res.status(401).end();
 
     const order = JSON.parse(raw.toString("utf8"));
     const orderName = normalizeOrder(order.name || order.order_number);
